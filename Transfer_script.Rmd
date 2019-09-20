@@ -1,0 +1,430 @@
+---
+title: "Transfer Analyses"
+author: "Janet Bang and Virginia Marchman"
+date: "April 15, 2019; updated September 20, 2019"
+output:
+  html_document: 
+   toc: true
+   toc_float: true
+---
+
+```{r, echo = F}
+library(knitr)
+opts_chunk$set(echo=TRUE, 
+               warning=FALSE, message=FALSE, 
+               cache=FALSE)
+options(width = 100)
+```
+
+This is the code to generate the analyses in Marchman, Bermudez, Bang & Fernald (2019), Off to a good start: Early Spanish-language processing efficiency supports Spanish- and English-language outcomes at 4 ½ years in sequential bilinguals. 
+
+Load libraries and set theme
+```{r}
+library(tidyverse)
+library(effsize)
+library(stargazer)
+library(psych)
+library(powerAnalysis)
+
+theme_set(theme_bw())
+```
+
+
+
+# Data prepping
+### Load data
+```{r}
+transfer <- read_csv("transfer.csv")
+```
+
+
+
+### Check data
+```{r}
+# Sex - 41 boys, 54 girls
+transfer %>% 
+  group_by(Sex) %>% 
+  count()
+```
+
+
+
+### Transform variables (e.g., character to factor)
+```{r}
+transfer <- transfer %>% 
+  mutate(ID_1 = factor(ID_1), 
+         MomCountryBirth = factor(MomCountryBirth),
+         Sex = factor(Sex))
+```
+
+
+
+
+# Demographic variables
+### Descriptive statistics
+```{r}
+# all descriptives for continuous variables
+age_descriptives <- sapply(transfer[, 4], describe)
+
+other_descriptives <- sapply(transfer[, 9:22], describe)
+
+cbind(age_descriptives, other_descriptives)
+```
+
+
+
+### Percentage of mothers by country of birth
+```{r}
+transfer %>% 
+  group_by(MomCountryBirth) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(percentage = n/sum(n))
+```
+
+
+### Percentage of children by birth order
+```{r}
+transfer %>% 
+  group_by(BirthOrder) %>% 
+  count() %>% 
+  ungroup() %>% 
+  mutate(percentage = n/sum(n))
+```
+
+
+
+### Number of trials for RT
+```{r}
+transfer %>% 
+  summarise(mean_trials = mean(DRT25mKnownN, na.rm = T), 
+            sd_trials = sd(DRT25mKnownN, na.rm = T),
+            min_trials = min(DRT25mKnownN, na.rm = T), 
+            max_trials = max(DRT25mKnownN, na.rm = T))
+```
+### Number of trials for Accuracy
+```{r}
+transfer %>% 
+  summarise(mean_trials = mean(ACC25m3001800KnownN, na.rm = T), 
+            sd_trials = sd(ACC25m3001800KnownN, na.rm = T),
+            min_trials = min(ACC25m3001800KnownN, na.rm = T), 
+            max_trials = max(ACC25m3001800KnownN, na.rm = T))
+```
+
+
+
+# Language Background at 2 and 4.5 years
+```{r}
+# calculate difference scores for sd
+# cohen's d
+transfer <- transfer %>% 
+  mutate(LBQSpan_diff = LBQSpan25m - LBQSpan_4.5yrs, 
+         LBQSpanCaregivers_diff = LBQSpan25mCaregivers - LBQSpanCaregivers_4.5yrs)
+
+# comparing LBQ OVERALL at 2 and 4.5 yrs
+t.test(transfer$LBQSpan25m, transfer$LBQSpan_4.5yrs, paired = TRUE, alternative = "two.sided")
+effsize::cohen.d(transfer$LBQSpan25m, transfer$LBQSpan_4.5yrs, paired = T)
+
+# comparing LBQ CAREGIVERS at 2 and 4.5 yrs
+t.test(transfer$LBQSpan25mCaregivers, transfer$LBQSpanCaregivers_4.5yrs, paired = TRUE, alternative = "two.sided")
+effsize::cohen.d(transfer$LBQSpan25mCaregivers, transfer$LBQSpanCaregivers_4.5yrs, paired = T)
+```
+
+
+
+# Child language measures at 2 years
+```{r}
+# Accuracy - t-test against chance
+t.test(transfer$GoodACC25m3001800Known, y = NULL, mu = .50, var.equal = FALSE)
+(mean(transfer$GoodACC25m3001800Known) - .50) / sd(transfer$GoodACC25m3001800Known)
+
+# Correlations between CDI and Processing measures
+# CDI and Accuracy
+cor.test(transfer$CDIVocPost25, transfer$GoodACC25m3001800Known)
+
+# CDI and RT
+cor.test(transfer$CDIVocPost25, transfer$GoodDRT25mKnown)
+
+# Accuracy and RT
+cor.test(transfer$GoodACC25m3001800Known, transfer$GoodDRT25mKnown)
+
+```
+
+
+
+# Child language measures at 4.5 years
+```{r}
+# comparing Spanish and English composite scores
+t.test(transfer$Spancomposite, transfer$Engcomposite, paired = TRUE, alternative = "two.sided")
+effsize::cohen.d(transfer$Spancomposite, transfer$Engcomposite)
+
+# Spanish composite scores against norm
+t.test(transfer$Spancomposite, y = NULL, mu = 100, var.equal = FALSE)
+ES.t.one(m=92.5,sd=17.3,mu=100)
+
+# English composite scores against norm
+t.test(transfer$Engcomposite, y = NULL, mu = 100, var.equal = FALSE)
+ES.t.one(m=87.7,sd=13.1,mu=100)
+
+# correlation between Spanish and English composite scores
+cor.test(transfer$Spancomposite, transfer$Engcomposite)
+
+```
+
+
+
+
+# Regression models
+### Center covariates
+```{r}
+# the "c" function turns the class from matrix to numeric
+# scale = divides by the standard deviation
+transfer <- transfer %>% 
+  mutate(age_4.5y_zscore = c(scale(Age, scale = T)), 
+         hi_4.5y_zscore = c(scale(HI_4.5yrs, scale = T)), 
+         lbq_4.5y_zscore = c(scale(LBQSpan_4.5yrs, scale = T)), 
+         cdi_25m_zscore = c(scale(CDIVocPost25, scale = T)), 
+         rt_zscore = c(scale(GoodDRT25mKnown, scale = T)),
+         acc_zscore = c(scale(GoodACC25m3001800Known, scale = T)))
+```
+
+
+
+### Models - Spanish composite
+```{r}
+# covariates only
+m1 <- lm(Spancomposite ~ hi_4.5y_zscore + age_4.5y_zscore, 
+         data = transfer)
+
+# covariates + lbq
+m2 <- lm(Spancomposite ~ hi_4.5y_zscore + age_4.5y_zscore + 
+           lbq_4.5y_zscore, 
+         data = transfer)
+
+# covariates + lbq + cdi
+m3 <- lm(Spancomposite ~ hi_4.5y_zscore + age_4.5y_zscore + 
+           lbq_4.5y_zscore + cdi_25m_zscore, 
+         data = transfer)
+
+# covariates + lbq + acc
+m4 <- lm(Spancomposite ~ hi_4.5y_zscore + age_4.5y_zscore + 
+           lbq_4.5y_zscore + acc_zscore, 
+         data = transfer)
+
+# covariates + lbq + cdi + acc
+m5 <- lm(Spancomposite ~ hi_4.5y_zscore + age_4.5y_zscore + 
+           lbq_4.5y_zscore + cdi_25m_zscore + acc_zscore, 
+         data = transfer)
+
+# covariates + lbq + rt
+m6 <- lm(Spancomposite ~ hi_4.5y_zscore + age_4.5y_zscore + 
+           lbq_4.5y_zscore + rt_zscore, 
+         data = transfer)
+
+# covariates + lbq + cdi + rt
+m7 <- lm(Spancomposite ~ hi_4.5y_zscore + age_4.5y_zscore + 
+           lbq_4.5y_zscore + cdi_25m_zscore + 
+           rt_zscore, 
+         data = transfer)
+
+anova(m1, m2, m3)
+anova(m1, m2, m4)
+anova(m1, m2, m5)
+anova(m1, m2, m6)
+anova(m1, m2, m7)
+
+stargazer(m1, m2, m3, m4, m5, m6, m7, type = "text",
+         star.char = c(".","*","**","***"),
+         star.cutoffs = c(.1, .05, .01, .001),
+         notes = c(". p<0.1; * p<0.05; ** p<0.01; *** p<0.001"),
+         notes.append = F,
+         digits = 2,
+         dep.var.labels = c("Spanish Language Composite"),
+         covariate.labels=c("SES 4.5y", "Age at 4.5y", "Spanish Language Exposure at 4.5y",
+                            "Spanish Vocabulary at 25m", "Spanish Accuracy at 25m",
+                            "Spanish RT at 25m"))
+
+```
+
+### Models - English composite
+```{r}
+# covariates only
+m8 <- lm(Engcomposite ~ hi_4.5y_zscore + age_4.5y_zscore, 
+         data = transfer)
+
+# covariates + lbq
+m9 <- lm(Engcomposite ~ hi_4.5y_zscore + age_4.5y_zscore + 
+           lbq_4.5y_zscore, 
+         data = transfer)
+
+# covariates + lbq + cdi
+m10 <- lm(Engcomposite ~ hi_4.5y_zscore + age_4.5y_zscore + 
+           lbq_4.5y_zscore + cdi_25m_zscore, 
+         data = transfer)
+
+# covariates + lbq + acc
+m11 <- lm(Engcomposite ~ hi_4.5y_zscore + age_4.5y_zscore + 
+           lbq_4.5y_zscore + acc_zscore, 
+         data = transfer)
+
+# covariates + lbq + cdi + acc
+m12 <- lm(Engcomposite ~ hi_4.5y_zscore + age_4.5y_zscore + 
+           lbq_4.5y_zscore + cdi_25m_zscore + acc_zscore, 
+         data = transfer)
+
+# covariates + lbq + rt
+m13 <- lm(Engcomposite ~ hi_4.5y_zscore + age_4.5y_zscore + 
+           lbq_4.5y_zscore + rt_zscore, 
+         data = transfer)
+
+# covariates + lbq + cdi + rt
+m14 <- lm(Engcomposite ~ hi_4.5y_zscore + age_4.5y_zscore + 
+           lbq_4.5y_zscore + cdi_25m_zscore + 
+           rt_zscore, 
+         data = transfer)
+
+anova(m8, m9, m10)
+anova(m8, m9, m11)
+anova(m8, m9, m12)
+anova(m8, m9, m13)
+anova(m8, m9, m14)
+stargazer(m8, m9, m10, m11, m12, m13, m14, type = "text",
+         star.char = c(".","*","**","***"),
+         star.cutoffs = c(.1, .05, .01, .001),
+         notes = c(". p<0.1; * p<0.05; ** p<0.01; *** p<0.001"),
+         notes.append = F,
+         digits = 2,
+         dep.var.labels = c("English Language Composite"),
+         covariate.labels=c("Age at 4.5y","SES 4.5y","Spanish Language Exposure at 4.5y",
+                            "Spanish Vocabulary at 25m", "RT at 25m"))
+
+```
+### Partial regression plot: Spanish Composite and Vocabulary
+```{r}
+# Spanish Composite and Vocab at 25m (from Model 7)
+
+## spanish composite residuals - not including CDI
+m_sp_comp <- lm(Spancomposite ~ age_4.5y_zscore + hi_4.5y_zscore + 
+           lbq_4.5y_zscore + rt_zscore, data = transfer)
+resid_sp_comp <- resid(m_sp_comp)
+
+# cdi residuals - not including spanish composite
+m_cdi_resid <- lm(cdi_25m_zscore ~ age_4.5y_zscore + hi_4.5y_zscore + 
+           lbq_4.5y_zscore + rt_zscore, data = transfer)
+resid_cdi <- resid(m_cdi_resid)
+
+# create dataframe
+resid_sp_comp_cdi <- data.frame(resid_sp_comp, resid_cdi)
+
+# correlation
+corr_sp_comp_cdi <- cor.test(resid_sp_comp, resid_cdi)
+round(((corr_sp_comp_cdi$estimate)^2), digits = 3)
+
+# plot
+ggplot(resid_sp_comp_cdi, aes(resid_cdi, resid_sp_comp)) + 
+  geom_point() + 
+  geom_smooth(method = "lm") + 
+  theme(text = element_text(size = 20)) + 
+  labs(x = "Spanish Vocabulary at 25m (residuals)", y = "Spanish Language\nComposite\nat 4.5 years\n(residuals)") + 
+  theme(axis.title.y = element_text(angle = 0, vjust = 0.5)) + 
+  annotate("text", x = 2, y = 26.5, label = "paste(R ^ 2, \" = .167\")", parse = TRUE, size = 6) # change this R2 value for each plot
+ggsave("./figures/scatterplot_resid_sp_comp_cdi.pdf", height = 8, width = 11, units = "in")
+
+```
+
+### Partial regression plot: Spanish Composite and RT
+```{r}
+# Spanish Composite and RT at 25m (from Model 7)
+
+## spanish composite residuals - not including rt
+m_sp_comp <- lm(Spancomposite ~ age_4.5y_zscore + hi_4.5y_zscore + 
+           lbq_4.5y_zscore + cdi_25m_zscore, data = transfer)
+resid_sp_comp <- resid(m_sp_comp)
+
+# rt residuals - not including spanish composite
+m_rt_resid <- lm(rt_zscore ~ age_4.5y_zscore + hi_4.5y_zscore + 
+           lbq_4.5y_zscore + cdi_25m_zscore, data = transfer)
+resid_rt <- resid(m_rt_resid)
+
+# create dataframe
+resid_sp_comp_rt <- data.frame(resid_sp_comp, resid_rt)
+
+# correlation
+corr_sp_comp_rt <- cor.test(resid_sp_comp, resid_rt)
+round((corr_sp_comp_rt$estimate)^2, digits = 3)
+
+# plot
+ggplot(resid_sp_comp_rt, aes(resid_rt, resid_sp_comp)) + 
+  geom_point() + 
+  geom_smooth(method = "lm") + 
+  theme(text = element_text(size = 20)) + 
+  labs(x = "Spanish RT at 25m (residuals)", y = "Spanish Language\nComposite\nat 4.5 years\n(residuals)") + 
+  theme(axis.title.y = element_text(angle = 0, vjust = 0.5)) + 
+  annotate("text", x = 2.5, y = 26.5, label = "paste(R ^ 2, \" = .107\")", parse = TRUE, size = 6) # change this R2 value for each plot
+ggsave("./figures/scatterplot_resid_sp_comp_rt.pdf", height = 8, width = 11, units = "in")
+
+```
+### Partial regression plot: English Composite and Vocabulary
+```{r}
+# English Composite and Vocab at 25m (from Model 14)
+
+## English composite residuals - not including CDI
+m_eng_comp <- lm(Engcomposite ~ age_4.5y_zscore + hi_4.5y_zscore + 
+           lbq_4.5y_zscore + rt_zscore, data = transfer)
+resid_eng_comp <- resid(m_eng_comp)
+
+# cdi residuals - not including English composite
+m_cdi_resid <- lm(cdi_25m_zscore ~ age_4.5y_zscore + hi_4.5y_zscore + 
+           lbq_4.5y_zscore + rt_zscore, data = transfer)
+resid_cdi <- resid(m_cdi_resid)
+
+# create dataframe
+resid_eng_comp_cdi <- data.frame(resid_eng_comp, resid_cdi)
+
+# correlation
+corr_eng_comp_cdi <- cor.test(resid_eng_comp, resid_cdi)
+round(((corr_eng_comp_cdi$estimate)^2), digits = 3)
+
+# plot
+ggplot(resid_eng_comp_cdi, aes(resid_cdi, resid_eng_comp)) + 
+  geom_point() + 
+  geom_smooth(method = "lm") + 
+  theme(text = element_text(size = 20)) + 
+  labs(x = "Spanish Vocabulary at 25m (residuals)", y = "English Language\nComposite\nat 4.5 years\n(residuals)") + 
+  theme(axis.title.y = element_text(angle = 0, vjust = 0.5)) + 
+  annotate("text", x = 2, y = 26.5, label = "paste(R ^ 2, \" = .039\")", parse = TRUE, size = 6) # change this R2 value for each plot
+ggsave("./figures/scatterplot_resid_eng_comp_cdi.pdf", height = 8, width = 11, units = "in")
+
+```
+### Partial regression plot: English Composite and RT
+```{r}
+# English Composite and RT at 25m (from Model 14)
+
+## English composite residuals - not including rt
+m_eng_comp <- lm(Engcomposite ~ age_4.5y_zscore + hi_4.5y_zscore + 
+           lbq_4.5y_zscore + cdi_25m_zscore, data = transfer)
+resid_eng_comp <- resid(m_eng_comp)
+
+# rt residuals - not including English composite
+m_rt_resid <- lm(rt_zscore ~ age_4.5y_zscore + hi_4.5y_zscore + 
+           lbq_4.5y_zscore + cdi_25m_zscore, data = transfer)
+resid_rt <- resid(m_rt_resid)
+
+# create dataframe
+resid_eng_comp_rt <- data.frame(resid_eng_comp, resid_rt)
+
+# correlation
+corr_eng_comp_rt <- cor.test(resid_eng_comp, resid_rt)
+round((corr_eng_comp_rt$estimate)^2, digits = 3)
+
+# plot
+ggplot(resid_eng_comp_rt, aes(resid_rt, resid_eng_comp)) + 
+  geom_point() + 
+  geom_smooth(method = "lm") + 
+  theme(text = element_text(size = 20)) + 
+  labs(x = "Spanish RT at 25m (residuals)", y = "English Language\nComposite\nat 4.5 years\n(residuals)") + 
+  theme(axis.title.y = element_text(angle = 0, vjust = 0.5)) + 
+  annotate("text", x = 2.5, y = 26.5, label = "paste(R ^ 2, \" = .091\")", parse = TRUE, size = 6) # change this R2 value for each plot
+ggsave("./figures/scatterplot_resid_eng_comp_rt.pdf", height = 8, width = 11, units = "in")
+
+```
