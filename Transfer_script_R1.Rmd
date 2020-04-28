@@ -1,6 +1,6 @@
 ---
 title: "Transfer Analyses"
-author: "Janet Bang and Virginia Marchman"
+author: "Virginia Marchman and Janet Bang"
 date: "April 15, 2019; updated September 20, 2019; Updated for R1 of paper January 21, 2020"
 output:
   html_document: 
@@ -16,7 +16,7 @@ opts_chunk$set(echo=TRUE,
 options(width = 100)
 ```
 
-This is the code to generate the analyses in Marchman, Bermudez, Bang & Fernald (2019), Off to a good start: Early Spanish-language processing efficiency supports Spanish- and English-language outcomes at 4 ½ years in sequential bilinguals. Submitted Oct 2019; Revisions made January 2020.
+This is the code to generate the analyses in Marchman, Bermudez, Bang & Fernald (2019), Off to a good start: Early Spanish-language processing efficiency supports Spanish- and English-language outcomes at 4 ½ years in sequential bilinguals. Submitted Oct 2019; Revisions made January 2020; Final manuscript accepted for publication April 2020.
 
 Load libraries and set theme
 ```{r}
@@ -30,11 +30,11 @@ theme_set(theme_bw())
 ```
 
 
-
 # Data prepping
 ### Load data
 ```{r}
-transfer <- read_csv("transfer.csv")
+transfer <- read_csv("transfer.csv") %>% 
+  dplyr::select(-X1)
 ```
 
 
@@ -63,7 +63,7 @@ transfer <- transfer %>%
 # Demographic variables
 ### Descriptive statistics
 ```{r}
-# all descriptives for continuous variables
+# All descriptives for continuous variables
 age_descriptives <- sapply(transfer[, 4], describe)
 
 other_descriptives <- sapply(transfer[, 9:22], describe)
@@ -102,6 +102,9 @@ transfer %>%
             min_trials = min(DRT25mKnownN, na.rm = T), 
             max_trials = max(DRT25mKnownN, na.rm = T))
 ```
+
+
+
 ### Number of trials for Accuracy
 ```{r}
 transfer %>% 
@@ -115,17 +118,11 @@ transfer %>%
 
 # Language Background at 2 and 4.5 years
 ```{r}
-# calculate difference scores for sd
-# cohen's d
-transfer <- transfer %>% 
-  mutate(LBQSpan_diff = LBQSpan25m - LBQSpan_4.5yrs, 
-         LBQSpanCaregivers_diff = LBQSpan25mCaregivers - LBQSpanCaregivers_4.5yrs)
-
-# comparing LBQ OVERALL at 2 and 4.5 yrs
+# Comparing LBQ OVERALL at 2 and 4.5 yrs
 t.test(transfer$LBQSpan25m, transfer$LBQSpan_4.5yrs, paired = TRUE, alternative = "two.sided")
 effsize::cohen.d(transfer$LBQSpan25m, transfer$LBQSpan_4.5yrs, paired = T)
 
-# comparing LBQ CAREGIVERS at 2 and 4.5 yrs
+# Comparing LBQ CAREGIVERS at 2 and 4.5 yrs
 t.test(transfer$LBQSpan25mCaregivers, transfer$LBQSpanCaregivers_4.5yrs, paired = TRUE, alternative = "two.sided")
 effsize::cohen.d(transfer$LBQSpan25mCaregivers, transfer$LBQSpanCaregivers_4.5yrs, paired = T)
 
@@ -162,7 +159,7 @@ cor.test(transfer$CDIVocPost25, transfer$GoodDRT25mKnown)
 
 # Child language measures at 4.5 years
 ```{r}
-# comparing Spanish and English composite scores
+# Comparing Spanish and English composite scores
 t.test(transfer$Spancomposite, transfer$Engcomposite, paired = TRUE, alternative = "two.sided")
 effsize::cohen.d(transfer$Spancomposite, transfer$Engcomposite)
 
@@ -174,7 +171,7 @@ ES.t.one(m=92.5,sd=17.3,mu=100)
 t.test(transfer$Engcomposite, y = NULL, mu = 100, var.equal = FALSE)
 ES.t.one(m=87.7,sd=13.1,mu=100)
 
-# correlation between Spanish and English composite scores
+# Correlation between Spanish and English composite scores
 cor.test(transfer$Spancomposite, transfer$Engcomposite)
 
 ```
@@ -185,7 +182,7 @@ cor.test(transfer$Spancomposite, transfer$Engcomposite)
 # Regression models
 ### Center covariates
 ```{r}
-# the "c" function turns the class from matrix to numeric
+# The "c" function turns the class from matrix to numeric
 # scale = divides by the standard deviation
 transfer <- transfer %>% 
   mutate(age_4.5y_zscore = c(scale(Age, scale = T)), 
@@ -247,6 +244,8 @@ stargazer(m1, m2, m3, m4, m5, m6, type = "text",
 
 ```
 
+
+
 ### Models - English composite
 ```{r}
 # covariates only
@@ -293,6 +292,9 @@ stargazer(m7, m8, m9, m10, m11, m12, type = "text",
                             "RT at 25m"))
 
 ```
+
+
+
 ### Partial regression plot: Spanish Composite and Vocabulary
 ```{r}
 # Spanish Composite and Vocab at 25m (from Model 6)
@@ -326,6 +328,8 @@ ggsave("./figures/scatterplot_resid_sp_comp_cdi.pdf", height = 8, width = 11, un
 
 ```
 
+
+
 ### Partial regression plot: Spanish Composite and RT
 ```{r}
 # Spanish Composite and RT at 25m (from Model 6)
@@ -358,6 +362,9 @@ ggplot(resid_sp_comp_rt, aes(resid_rt, resid_sp_comp)) +
 ggsave("./figures/scatterplot_resid_sp_comp_rt.pdf", height = 8, width = 11, units = "in")
 
 ```
+
+
+
 ### Partial regression plot: English Composite and Vocabulary
 ```{r}
 # English Composite and Vocab at 25m (from Model 12)
@@ -390,6 +397,9 @@ ggplot(resid_eng_comp_cdi, aes(resid_cdi, resid_eng_comp)) +
 ggsave("./figures/scatterplot_resid_eng_comp_cdi.pdf", height = 8, width = 11, units = "in")
 
 ```
+
+
+
 ### Partial regression plot: English Composite and RT
 ```{r}
 # English Composite and RT at 25m (from Model 12)
